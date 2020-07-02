@@ -102,13 +102,17 @@ static vm_prot_t get_protection(void *sectionStart) {
     return VM_PROT_READ;
   }
 }
+// 核心
+// 
 static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            section_t *section,
                                            intptr_t slide,
                                            nlist_t *symtab,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
+  //
   const bool isDataConst = strcmp(section->segname, SEG_DATA_CONST) == 0;
+  // 在 Indirect Symbol 表中检索到对应位置
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
   vm_prot_t oldProtection = VM_PROT_READ;
@@ -122,16 +126,24 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
         symtab_index == (INDIRECT_SYMBOL_LOCAL   | INDIRECT_SYMBOL_ABS)) {
       continue;
     }
+    // 从 symtab 计算得到 strtab 的 offset
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
+    // 拿到 symbol_name
     char *symbol_name = strtab + strtab_offset;
+    
     bool symbol_name_longer_than_1 = symbol_name[0] && symbol_name[1];
+    //
     struct rebindings_entry *cur = rebindings;
+    // 遍历链表
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
+        // 找到符号
         if (symbol_name_longer_than_1 &&
             strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
+          // 如果 hook 函数不为 null 且 indirect_symbol 不等于 replacement
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
+            
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
           }
           indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
@@ -209,9 +221,11 @@ static void rebind_symbols_for_image(struct rebindings_entry *rebindings,
         section_t *sect =
           (section_t *)(cur + sizeof(segment_command_t)) + j;
         if ((sect->flags & SECTION_TYPE) == S_LAZY_SYMBOL_POINTERS) {
+          // 找到 lazy_symbol_pointers
           perform_rebinding_with_section(rebindings, sect, slide, symtab, strtab, indirect_symtab);
         }
         if ((sect->flags & SECTION_TYPE) == S_NON_LAZY_SYMBOL_POINTERS) {
+          // 找到 non_lazy_symbol_pointers
           perform_rebinding_with_section(rebindings, sect, slide, symtab, strtab, indirect_symtab);
         }
       }
