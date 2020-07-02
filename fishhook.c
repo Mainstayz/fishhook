@@ -110,10 +110,11 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
                                            nlist_t *symtab,
                                            char *strtab,
                                            uint32_t *indirect_symtab) {
-  //
   const bool isDataConst = strcmp(section->segname, SEG_DATA_CONST) == 0;
   // 在 Indirect Symbol 表中检索到对应位置
   uint32_t *indirect_symbol_indices = indirect_symtab + section->reserved1;
+  // 获取 _DATA.__nl_symbol_ptr(或__la_symbol_ptr) Section
+  // 已知其 value 是一个指针类型，整段区域用二阶指针来获取
   void **indirect_symbol_bindings = (void **)((uintptr_t)slide + section->addr);
   vm_prot_t oldProtection = VM_PROT_READ;
   if (isDataConst) {
@@ -121,6 +122,8 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     mprotect(indirect_symbol_bindings, section->size, PROT_READ | PROT_WRITE);
   }
   for (uint i = 0; i < section->size / sizeof(void *); i++) {
+    // 通过下标来获取每一个 Indirect Address 的 Value
+    // 这个 Value 也是外层寻址时需要的下标
     uint32_t symtab_index = indirect_symbol_indices[i];
     if (symtab_index == INDIRECT_SYMBOL_ABS || symtab_index == INDIRECT_SYMBOL_LOCAL ||
         symtab_index == (INDIRECT_SYMBOL_LOCAL   | INDIRECT_SYMBOL_ABS)) {
@@ -128,11 +131,10 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     }
     // 从 symtab 计算得到 strtab 的 offset
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
-    // 拿到 symbol_name
+    // 就为了拿到 symbol_name 
+    // 前面一大堆流程和铺垫就为了拿到 symbol_name？？？
     char *symbol_name = strtab + strtab_offset;
-    
     bool symbol_name_longer_than_1 = symbol_name[0] && symbol_name[1];
-    //
     struct rebindings_entry *cur = rebindings;
     // 遍历链表
     while (cur) {
@@ -143,9 +145,10 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
           // 如果 hook 函数不为 null 且 indirect_symbol 不等于 replacement
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
-            
+            // 记录原始跳转地址
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
           }
+          // 重写跳转地址
           indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
           goto symbol_loop;
         }
